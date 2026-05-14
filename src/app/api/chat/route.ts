@@ -33,9 +33,7 @@ export async function POST(req: NextRequest) {
       model: selectedModel,
       messages: chatMessages,
       deliveryMethod: "stream",
-      tools: [
-        { type: selectedModel.startsWith("openai:") ? "webSearch" : "search" },
-      ],
+      ...(selectedModel.startsWith("openai:") ? { tools: [{ type: "webSearch" }] } : {}),
       settings: {
         maxTokens: 4096,
         thinkingLevel: "medium",
