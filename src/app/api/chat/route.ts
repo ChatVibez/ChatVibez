@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       messages: chatMessages,
       deliveryMethod: "stream",
       tools: [
-        { type: "search" },
+        { type: "webSearch" },
       ],
       settings: {
         maxTokens: 4096,
