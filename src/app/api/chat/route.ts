@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   }
 
   const requestBody = {
-    model: model || "openai:gpt-5.5@0",
+    model: model || "openai:gpt-5-5@0",
     messages,
     stream: true,
   };
