@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
   // Model ID can be set via env var RUNWARE_MODEL or passed from client
   // Examples: "openai:gpt-5.5@0", "minimax:m2.7@0", "google:gemini@3.1-pro"
-  const selectedModel = model || process.env.RUNWARE_MODEL || "openai:gpt-5.5@0";
+  const selectedModel = model || process.env.RUNWARE_MODEL || "openai:gpt@5.5";
 
   const requestBody = {
     model: selectedModel,
