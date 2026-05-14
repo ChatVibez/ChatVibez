@@ -26,6 +26,22 @@ export async function POST(req: NextRequest) {
       content: m.content,
     }));
 
+  // Build settings based on model capabilities
+  const isOpenAI = selectedModel.startsWith("openai:");
+  const isMiniMax = selectedModel.startsWith("minimax:");
+
+  const settings: Record<string, unknown> = {
+    maxTokens: 4096,
+    ...(systemMessage ? { systemPrompt: systemMessage.content } : {}),
+  };
+
+  // MiniMax supports temperature, OpenAI/Claude use thinkingLevel
+  if (isMiniMax) {
+    settings.temperature = 0.7;
+  } else {
+    settings.thinkingLevel = "medium";
+  }
+
   const requestBody = [
     {
       taskType: "textInference",
@@ -33,12 +49,8 @@ export async function POST(req: NextRequest) {
       model: selectedModel,
       messages: chatMessages,
       deliveryMethod: "stream",
-      ...(selectedModel.startsWith("openai:") ? { tools: [{ type: "webSearch" }] } : {}),
-      settings: {
-        maxTokens: 4096,
-        thinkingLevel: "medium",
-        ...(systemMessage ? { systemPrompt: systemMessage.content } : {}),
-      },
+      ...(isOpenAI ? { tools: [{ type: "webSearch" }] } : {}),
+      settings,
     },
   ];
 

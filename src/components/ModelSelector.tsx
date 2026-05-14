@@ -23,6 +23,12 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     provider: "Anthropic",
     description: "Advanced coding, agents & multimodal reasoning",
   },
+  {
+    id: "minimax:m2.7@highspeed",
+    name: "MiniMax M2.7 Highspeed",
+    provider: "MiniMax",
+    description: "Fast responses for coding agents & automation",
+  },
 ];
 
 interface ModelSelectorProps {
