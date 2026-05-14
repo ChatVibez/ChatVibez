@@ -19,7 +19,6 @@ export async function POST(req: NextRequest) {
     model: selectedModel,
     messages,
     stream: true,
-    max_completion_tokens: 4096,
   };
 
   console.log("Sending to Runware:", JSON.stringify(requestBody, null, 2));
