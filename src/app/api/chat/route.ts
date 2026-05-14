@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { randomUUID } from "crypto";
 
 export async function POST(req: NextRequest) {
   const { messages, model } = await req.json();
@@ -11,19 +12,38 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Model ID can be set via env var RUNWARE_MODEL or passed from client
-  // Examples: "openai:gpt-5.5@0", "minimax:m2.7@0", "google:gemini@3.1-pro"
   const selectedModel = model || process.env.RUNWARE_MODEL || "openai:gpt@5.5";
 
-  const requestBody: Record<string, unknown> = {
-    model: selectedModel,
-    messages,
-    stream: true,
-  };
+  // Runware native API format for text inference
+  const taskUUID = randomUUID();
+
+  // Convert messages: extract system prompt if present
+  const systemMessage = messages.find((m: { role: string }) => m.role === "system");
+  const chatMessages = messages
+    .filter((m: { role: string }) => m.role !== "system")
+    .map((m: { role: string; content: string }) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+  const requestBody = [
+    {
+      taskType: "textInference",
+      taskUUID,
+      model: selectedModel,
+      messages: chatMessages,
+      deliveryMethod: "stream",
+      settings: {
+        maxTokens: 4096,
+        thinkingLevel: "medium",
+        ...(systemMessage ? { systemPrompt: systemMessage.content } : {}),
+      },
+    },
+  ];
 
   console.log("Sending to Runware:", JSON.stringify(requestBody, null, 2));
 
-  const response = await fetch("https://api.runware.ai/v1/chat/completions", {
+  const response = await fetch("https://api.runware.ai/v1", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -42,6 +62,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Forward the SSE stream to the client
+  // Runware native API streams: data: {"taskUUID":"...","taskType":"textInference","delta":{"text":"..."},"finishReason":null}
+  // We convert to OpenAI-compatible format for the frontend
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -72,7 +94,39 @@ export async function POST(req: NextRequest) {
               continue;
             }
             if (trimmed.startsWith("data: ")) {
-              controller.enqueue(encoder.encode(trimmed + "\n\n"));
+              try {
+                const data = JSON.parse(trimmed.slice(6));
+
+                // Check for errors
+                if (data.errors) {
+                  const errorChunk = {
+                    choices: [{ delta: { content: `Error: ${data.errors[0]?.message}` }, finish_reason: "stop" }],
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(errorChunk)}\n\n`));
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                  break;
+                }
+
+                // Convert Runware native format to OpenAI-compatible format
+                const text = data.delta?.text || "";
+                const finishReason = data.finishReason;
+
+                const chunk = {
+                  choices: [{
+                    delta: text ? { content: text } : {},
+                    finish_reason: finishReason || null,
+                  }],
+                };
+
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+
+                if (finishReason) {
+                  controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+                }
+              } catch {
+                // Skip malformed JSON
+                continue;
+              }
             }
           }
         }
