@@ -143,7 +143,9 @@ export function useChat() {
         });
 
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+          const errorData = await response.json().catch(() => ({}));
+          const detail = errorData.details || errorData.error || `Status ${response.status}`;
+          throw new Error(`API error: ${detail}`);
         }
 
         const reader = response.body?.getReader();

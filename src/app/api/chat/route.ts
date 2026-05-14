@@ -11,23 +11,26 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  const requestBody = {
+    model: model || "openai:gpt-5.5@0",
+    messages,
+    stream: true,
+  };
+
+  console.log("Sending to Runware:", JSON.stringify(requestBody, null, 2));
+
   const response = await fetch("https://api.runware.ai/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: model || "openai:gpt-5.5@0",
-      messages,
-      stream: true,
-      max_completion_tokens: 4096,
-      temperature: 0.7,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error("Runware API error:", response.status, errorText);
     return new Response(
       JSON.stringify({ error: `Runware API error: ${response.status}`, details: errorText }),
       { status: response.status, headers: { "Content-Type": "application/json" } }
