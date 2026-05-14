@@ -33,6 +33,9 @@ export async function POST(req: NextRequest) {
       model: selectedModel,
       messages: chatMessages,
       deliveryMethod: "stream",
+      tools: [
+        { type: "search" },
+      ],
       settings: {
         maxTokens: 4096,
         thinkingLevel: "medium",
