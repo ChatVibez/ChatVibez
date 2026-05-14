@@ -1,45 +1,68 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { Message, Conversation } from "@/types/chat";
 
 function generateId(): string {
   return crypto.randomUUID();
 }
 
-const STORAGE_KEY = "chatvibez_conversations";
-
-function loadConversations(): Conversation[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveConversations(conversations: Conversation[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
-}
-
 export function useChat() {
-  const [conversations, setConversations] = useState<Conversation[]>(() => loadConversations());
-  const [activeId, setActiveId] = useState<string | null>(
-    () => conversations[0]?.id || null
-  );
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeConversation = conversations.find((c) => c.id === activeId) || null;
   const messages = activeConversation?.messages || [];
 
-  const updateConversations = useCallback((updated: Conversation[]) => {
-    // Sort by updatedAt descending
-    const sorted = [...updated].sort((a, b) => b.updatedAt - a.updatedAt);
-    setConversations(sorted);
-    saveConversations(sorted);
+  // Load conversations from server on mount
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  const loadConversations = async () => {
+    try {
+      const res = await fetch("/api/conversations");
+      if (res.ok) {
+        const data = await res.json();
+        const convs: Conversation[] = data.map((row: { id: string; title: string; messages: Message[]; created_at: string; updated_at: string }) => ({
+          id: row.id,
+          title: row.title,
+          messages: row.messages || [],
+          createdAt: new Date(row.created_at).getTime(),
+          updatedAt: new Date(row.updated_at).getTime(),
+        }));
+        setConversations(convs);
+        if (convs.length > 0 && !activeId) {
+          setActiveId(convs[0].id);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to load conversations:", e);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  };
+
+  // Save conversation to server (debounced)
+  const saveConversation = useCallback((conversation: Conversation) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        await fetch("/api/conversations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(conversation),
+        });
+      } catch (e) {
+        console.error("Failed to save conversation:", e);
+      }
+    }, 500);
   }, []);
 
   const createConversation = useCallback(() => {
@@ -50,20 +73,32 @@ export function useChat() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    updateConversations([newConv, ...conversations]);
+    setConversations((prev) => [newConv, ...prev]);
     setActiveId(newConv.id);
+    saveConversation(newConv);
     return newConv.id;
-  }, [conversations, updateConversations]);
+  }, [saveConversation]);
 
   const deleteConversation = useCallback(
-    (id: string) => {
-      const updated = conversations.filter((c) => c.id !== id);
-      updateConversations(updated);
+    async (id: string) => {
+      setConversations((prev) => prev.filter((c) => c.id !== id));
       if (activeId === id) {
-        setActiveId(updated[0]?.id || null);
+        setActiveId((prev) => {
+          const remaining = conversations.filter((c) => c.id !== id);
+          return remaining[0]?.id || null;
+        });
+      }
+      try {
+        await fetch("/api/conversations", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+      } catch (e) {
+        console.error("Failed to delete conversation:", e);
       }
     },
-    [conversations, activeId, updateConversations]
+    [activeId, conversations]
   );
 
   const sendMessage = useCallback(
@@ -80,8 +115,7 @@ export function useChat() {
           updatedAt: Date.now(),
         };
         convId = newConv.id;
-        const updated = [newConv, ...conversations];
-        updateConversations(updated);
+        setConversations((prev) => [newConv, ...prev]);
         setActiveId(convId);
       }
 
@@ -100,11 +134,12 @@ export function useChat() {
       };
 
       // Add user message and empty assistant message
+      const finalConvId = convId;
       setConversations((prev) => {
         const updated = prev.map((c) => {
-          if (c.id === convId) {
+          if (c.id === finalConvId) {
             const newMessages = [...c.messages, userMessage, assistantMessage];
-            return {
+            const updatedConv = {
               ...c,
               messages: newMessages,
               title: c.messages.length === 0
@@ -112,10 +147,10 @@ export function useChat() {
                 : c.title,
               updatedAt: Date.now(),
             };
+            return updatedConv;
           }
           return c;
         });
-        saveConversations(updated);
         return updated;
       });
 
@@ -126,7 +161,7 @@ export function useChat() {
 
       try {
         // Build message history for API
-        const currentConv = conversations.find((c) => c.id === convId);
+        const currentConv = conversations.find((c) => c.id === finalConvId);
         const apiMessages = [
           ...(currentConv?.messages || []).map((m) => ({
             role: m.role,
@@ -182,10 +217,9 @@ export function useChat() {
                 if (text) {
                   fullContent += text;
 
-                  // Update the assistant message with streamed content
                   setConversations((prev) => {
-                    const updated = prev.map((c) => {
-                      if (c.id === convId) {
+                    return prev.map((c) => {
+                      if (c.id === finalConvId) {
                         const msgs = [...c.messages];
                         const lastMsg = msgs[msgs.length - 1];
                         if (lastMsg && lastMsg.role === "assistant") {
@@ -195,8 +229,6 @@ export function useChat() {
                       }
                       return c;
                     });
-                    saveConversations(updated);
-                    return updated;
                   });
                 }
               } catch (e) {
@@ -206,15 +238,27 @@ export function useChat() {
             }
           }
         }
+
+        // Save final state to database
+        setConversations((prev) => {
+          const conv = prev.find((c) => c.id === finalConvId);
+          if (conv) saveConversation(conv);
+          return prev;
+        });
+
       } catch (error: unknown) {
         if (error instanceof Error && error.name === "AbortError") {
-          // User stopped generation - keep what we have
+          // User stopped generation - save what we have
+          setConversations((prev) => {
+            const conv = prev.find((c) => c.id === finalConvId);
+            if (conv) saveConversation(conv);
+            return prev;
+          });
         } else {
           const errorMessage = error instanceof Error ? error.message : "An error occurred";
-          // Update assistant message with error
           setConversations((prev) => {
             const updated = prev.map((c) => {
-              if (c.id === convId) {
+              if (c.id === finalConvId) {
                 const msgs = [...c.messages];
                 const lastMsg = msgs[msgs.length - 1];
                 if (lastMsg && lastMsg.role === "assistant") {
@@ -227,7 +271,6 @@ export function useChat() {
               }
               return c;
             });
-            saveConversations(updated);
             return updated;
           });
         }
@@ -236,7 +279,7 @@ export function useChat() {
         abortControllerRef.current = null;
       }
     },
-    [activeId, conversations, updateConversations]
+    [activeId, conversations, saveConversation]
   );
 
   const stopGeneration = useCallback(() => {
@@ -250,6 +293,7 @@ export function useChat() {
     activeId,
     messages,
     isLoading,
+    isLoadingConversations,
     setActiveId,
     createConversation,
     deleteConversation,

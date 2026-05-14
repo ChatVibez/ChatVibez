@@ -3,10 +3,19 @@
 import { useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import ChatArea from "@/components/ChatArea";
+import LoginGate from "@/components/LoginGate";
 import { useChat } from "@/hooks/useChat";
 import { AVAILABLE_MODELS } from "@/components/ModelSelector";
 
 export default function Home() {
+  return (
+    <LoginGate>
+      <ChatApp />
+    </LoginGate>
+  );
+}
+
+function ChatApp() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState(AVAILABLE_MODELS[0].id);
   const {
@@ -14,6 +23,7 @@ export default function Home() {
     activeId,
     messages,
     isLoading,
+    isLoadingConversations,
     setActiveId,
     createConversation,
     deleteConversation,
@@ -24,6 +34,14 @@ export default function Home() {
   const handleSend = (content: string) => {
     sendMessage(content, selectedModel);
   };
+
+  if (isLoadingConversations) {
+    return (
+      <div className="h-screen bg-gray-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-gray-950 text-white overflow-hidden">
