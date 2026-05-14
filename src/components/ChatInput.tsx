@@ -38,9 +38,9 @@ export default function ChatInput({ onSend, onStop, isLoading, disabled }: ChatI
   };
 
   return (
-    <div className="border-t border-gray-700 bg-gray-900 p-4">
+    <div className="border-t border-[var(--border-color)] bg-[var(--bg-secondary)] p-4">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-end gap-2 bg-gray-800 rounded-xl border border-gray-600 focus-within:border-gray-500 px-4 py-3">
+        <div className="flex items-end gap-2 bg-[var(--input-bg)] rounded-xl border border-[var(--border-color)] focus-within:border-[var(--border-hover)] px-4 py-3">
           <textarea
             ref={textareaRef}
             value={input}
@@ -49,7 +49,7 @@ export default function ChatInput({ onSend, onStop, isLoading, disabled }: ChatI
             placeholder="Send a message..."
             rows={1}
             disabled={disabled}
-            className="flex-1 bg-transparent text-white placeholder-gray-400 resize-none outline-none text-sm max-h-[200px]"
+            className="flex-1 bg-transparent text-[var(--text-primary)] placeholder-[var(--text-faint)] resize-none outline-none text-sm max-h-[200px]"
           />
           {isLoading ? (
             <button
@@ -63,15 +63,15 @@ export default function ChatInput({ onSend, onStop, isLoading, disabled }: ChatI
             <button
               onClick={handleSubmit}
               disabled={!input.trim() || disabled}
-              className="shrink-0 p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              className="shrink-0 p-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
               title="Send message"
             >
               <Send size={16} />
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-2 text-center">
-          ChatVibez uses GPT-5.5 via Runware. AI can make mistakes.
+        <p className="text-xs text-[var(--text-faint)] mt-2 text-center">
+          ChatVibez uses GPT-5.5 & Claude via Runware. AI can make mistakes.
         </p>
       </div>
     </div>

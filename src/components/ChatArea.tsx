@@ -26,7 +26,7 @@ export default function ChatArea({ messages, onSend, onStop, isLoading, selected
   return (
     <div className="flex-1 flex flex-col h-full">
       {/* Header with model selector */}
-      <div className="border-b border-gray-700 bg-gray-900/50 px-4 py-2 flex items-center justify-center md:justify-start">
+      <div className="border-b border-[var(--border-color)] bg-[var(--bg-secondary)] px-4 py-2 flex items-center justify-center md:justify-start">
         <ModelSelector selectedModel={selectedModel} onSelect={onModelChange} />
       </div>
 
@@ -37,9 +37,9 @@ export default function ChatArea({ messages, onSend, onStop, isLoading, selected
             <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center mb-6">
               <Sparkles size={32} className="text-white" />
             </div>
-            <h1 className="text-2xl font-semibold text-white mb-2">ChatVibez</h1>
-            <p className="text-gray-400 max-w-md">
-              Powered by GPT-5.5 via Runware API. Ask me anything — I can help with code,
+            <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">ChatVibez</h1>
+            <p className="text-[var(--text-muted)] max-w-md">
+              Powered by GPT-5.5 & Claude via Runware API. Ask me anything — I can help with code,
               writing, analysis, and more.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-8 max-w-lg w-full">
@@ -52,7 +52,7 @@ export default function ChatArea({ messages, onSend, onStop, isLoading, selected
                 <button
                   key={suggestion}
                   onClick={() => onSend(suggestion)}
-                  className="text-left px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm text-gray-300 hover:bg-gray-700 hover:border-gray-600 transition-colors"
+                  className="text-left px-4 py-3 bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl text-sm text-[var(--text-secondary)] hover:bg-[var(--bg-tertiary)] hover:border-[var(--border-hover)] transition-colors"
                 >
                   {suggestion}
                 </button>
