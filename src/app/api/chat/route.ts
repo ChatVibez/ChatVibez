@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   // Examples: "openai:gpt-5.5@0", "minimax:m2.7@0", "google:gemini@3.1-pro"
   const selectedModel = model || process.env.RUNWARE_MODEL || "openai:gpt@5.5";
 
-  const requestBody = {
+  const requestBody: Record<string, unknown> = {
     model: selectedModel,
     messages,
     stream: true,
