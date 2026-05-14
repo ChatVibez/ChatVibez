@@ -11,10 +11,15 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  // Model ID can be set via env var RUNWARE_MODEL or passed from client
+  // Examples: "openai:gpt-5.5@0", "minimax:m2.7@0", "google:gemini@3.1-pro"
+  const selectedModel = model || process.env.RUNWARE_MODEL || "openai:gpt-5.5@0";
+
   const requestBody = {
-    model: model || "openai:gpt-5-5@0",
+    model: selectedModel,
     messages,
     stream: true,
+    max_completion_tokens: 4096,
   };
 
   console.log("Sending to Runware:", JSON.stringify(requestBody, null, 2));
