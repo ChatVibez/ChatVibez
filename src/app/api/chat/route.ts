@@ -4,27 +4,117 @@ import { randomUUID } from "crypto";
 export async function POST(req: NextRequest) {
   const { messages, model } = await req.json();
 
-  const apiKey = process.env.RUNWARE_API_KEY;
+  const selectedModel = model || process.env.RUNWARE_MODEL || "openai:gpt@5.5";
+
+  // DeepSeek models use their own API directly (OpenAI-compatible)
+  if (selectedModel.startsWith("deepseek-")) {
+    return handleDeepSeek(messages, selectedModel);
+  }
+
+  // All other models go through Runware
+  return handleRunware(messages, selectedModel);
+}
+
+async function handleDeepSeek(messages: { role: string; content: string }[], model: string) {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "API key not configured" }), {
+    return new Response(JSON.stringify({ error: "DeepSeek API key not configured" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  const selectedModel = model || process.env.RUNWARE_MODEL || "openai:gpt@5.5";
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: true,
+      max_tokens: 4096,
+    }),
+  });
 
-  // Runware native API format for text inference
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("DeepSeek API error:", response.status, errorText);
+    return new Response(
+      JSON.stringify({ error: `DeepSeek API error: ${response.status}`, details: errorText }),
+      { status: response.status, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  // DeepSeek uses standard OpenAI SSE format - forward directly
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        controller.close();
+        return;
+      }
+
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith(":")) continue;
+            if (trimmed === "data: [DONE]") {
+              controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+              continue;
+            }
+            if (trimmed.startsWith("data: ")) {
+              controller.enqueue(encoder.encode(trimmed + "\n\n"));
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Stream error:", error);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+async function handleRunware(messages: { role: string; content: string }[], selectedModel: string) {
+  const apiKey = process.env.RUNWARE_API_KEY;
+  if (!apiKey) {
+    return new Response(JSON.stringify({ error: "Runware API key not configured" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const taskUUID = randomUUID();
 
   // Convert messages: extract system prompt if present
-  const systemMessage = messages.find((m: { role: string }) => m.role === "system");
+  const systemMessage = messages.find((m) => m.role === "system");
   const chatMessages = messages
-    .filter((m: { role: string }) => m.role !== "system")
-    .map((m: { role: string; content: string }) => ({
-      role: m.role,
-      content: m.content,
-    }));
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role, content: m.content }));
 
   // Build settings based on model capabilities
   const isOpenAI = selectedModel.startsWith("openai:");
@@ -35,7 +125,6 @@ export async function POST(req: NextRequest) {
     ...(systemMessage ? { systemPrompt: systemMessage.content } : {}),
   };
 
-  // MiniMax supports temperature, OpenAI/Claude use thinkingLevel
   if (isMiniMax) {
     settings.temperature = 0.7;
   } else {
@@ -53,8 +142,6 @@ export async function POST(req: NextRequest) {
       settings,
     },
   ];
-
-  console.log("Sending to Runware:", JSON.stringify(requestBody, null, 2));
 
   const response = await fetch("https://api.runware.ai/v1", {
     method: "POST",
@@ -74,9 +161,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Forward the SSE stream to the client
-  // Runware native API streams: data: {"taskUUID":"...","taskType":"textInference","delta":{"text":"..."},"finishReason":null}
-  // We convert to OpenAI-compatible format for the frontend
+  // Convert Runware native SSE to OpenAI-compatible format
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
@@ -110,7 +195,6 @@ export async function POST(req: NextRequest) {
               try {
                 const data = JSON.parse(trimmed.slice(6));
 
-                // Check for errors
                 if (data.errors) {
                   const errorChunk = {
                     choices: [{ delta: { content: `Error: ${data.errors[0]?.message}` }, finish_reason: "stop" }],
@@ -120,7 +204,6 @@ export async function POST(req: NextRequest) {
                   break;
                 }
 
-                // Convert Runware native format to OpenAI-compatible format
                 const text = data.delta?.text || "";
                 const finishReason = data.finishReason;
 
@@ -137,7 +220,6 @@ export async function POST(req: NextRequest) {
                   controller.enqueue(encoder.encode("data: [DONE]\n\n"));
                 }
               } catch {
-                // Skip malformed JSON
                 continue;
               }
             }

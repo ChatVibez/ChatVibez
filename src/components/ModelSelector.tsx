@@ -29,6 +29,18 @@ export const AVAILABLE_MODELS: ModelOption[] = [
     provider: "MiniMax",
     description: "Fast responses for coding agents & automation",
   },
+  {
+    id: "deepseek-v4-pro",
+    name: "DeepSeek V4 Pro",
+    provider: "DeepSeek",
+    description: "Top-tier reasoning & coding, thinking mode",
+  },
+  {
+    id: "deepseek-v4-flash",
+    name: "DeepSeek V4 Flash",
+    provider: "DeepSeek",
+    description: "Fast & efficient, great for daily tasks",
+  },
 ];
 
 interface ModelSelectorProps {
